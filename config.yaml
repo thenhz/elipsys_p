@@ -1,4 +1,4 @@
-  batch: 2
+  batch: 4
   video_dir: "/code/datasets/eLipSys/data/s1"
   label_dir: "/code/datasets/eLipSys/data/alignments/s1"
   vocab_size: 40

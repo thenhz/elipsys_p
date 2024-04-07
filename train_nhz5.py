@@ -6,11 +6,12 @@ from models.NHz5 import NHz5
 from datasets.dummy.LoadDummy import DummyDataset
 import yaml
 
-def train(model, dataloader, criterion, optimizer, epochs):
+def train(model, dataloader, criterion, optimizer, epochs, device):
     model.train()
     for epoch in range(epochs):
         running_loss = 0.0
         for batch_idx, (inputs, labels) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)  # Move data to GPU
             # Zero the parameter gradients
             optimizer.zero_grad()
             
@@ -34,6 +35,8 @@ def train(model, dataloader, criterion, optimizer, epochs):
     print('Finished Training')
 
 def main():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     with open('config.yaml', 'r') as file:
         config_params = yaml.safe_load(file)
     # Initialize the dataset and dataloader
@@ -41,7 +44,9 @@ def main():
     dataloader = DataLoader(dataset, batch_size=config_params['batch'], shuffle=True)
 
     # Initialize the model
-    model = NHz5(config_params['shape'],config_params['vocab_size'])
+    model = NHz5(config_params['shape'],config_params['vocab_size']).to(device)
+    # to run in multi-gpu env
+    #model = nn.DataParallel(model).to(device)
 
     # Define the loss function and optimizer
     criterion = nn.CTCLoss()  
@@ -49,7 +54,7 @@ def main():
 
     # Train the model
     epochs = 10  # You can adjust the number of epochs
-    train(model, dataloader, criterion, optimizer, epochs)
+    train(model, dataloader, criterion, optimizer, epochs, device)
 
 if __name__ == '__main__':
     main()
