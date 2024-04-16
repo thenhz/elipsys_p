@@ -1,5 +1,14 @@
-  batch: 4
-  video_dir: "/code/datasets/eLipSys/data/s1"
-  label_dir: "/code/datasets/eLipSys/data/alignments/s1"
-  vocab_size: 40
-  shape: [1,75,46,140]
+batch: 2
+video_dir: "/code/datasets/eLipSys/data/s1"
+label_dir: "/code/datasets/eLipSys/data/alignments/s1"
+vocab_size: 40
+shape: [1,75,46,140]
+
+gpus : '1'
+lr : 0.00002
+n_dimention : 500
+weights : None
+max_epoch : 100
+temperture : 0.07
+num_workers : 4
+save_prefix : 'checkpoints/'
