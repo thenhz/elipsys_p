@@ -12,3 +12,4 @@ max_epoch : 100
 temperture : 0.07
 num_workers : 4
 save_prefix : 'checkpoints/'
+max_magnitude: 0.07

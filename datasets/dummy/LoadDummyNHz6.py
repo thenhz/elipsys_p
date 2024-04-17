@@ -10,7 +10,12 @@ from torchvision.transforms import Grayscale
 from torchvision.io import read_video
 import torch.nn.functional as F
 
+from datasets.dummy.transformers import *
+
+
+
 class MyDataset(Dataset):
+
     def __init__(self, video_dir, label_dir, phases, args):
         self.video_dir = video_dir
         self.label_dir = label_dir
@@ -23,45 +28,59 @@ class MyDataset(Dataset):
 
         self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
         self.label_files += glob.glob(os.path.join(label_dir, '*.align'))
+        # Create a mapping from words to numbers
+        vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
+        self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
 
     def __getitem__(self, idx):
         video_file = self.video_files[idx]
         label_file = self.label_files[idx]
 
-        # Load video data
-        #tensor = torch.load(video_file)
-        inputs , _, _ = read_video(video_file, output_format="TCHW")
+        result = {}
+        result['video'] = self.load_video(video_file)
+        result['label'], result['duration'] = self.extract_label(label_file) 
+
+        return result
+
+    def word_to_number_mapping(self, chars):
+        char_to_num = {}
+        num_to_char = {}
+        for i, char in enumerate(chars):
+            char_to_num[char] = i
+            num_to_char[i] = char
+        return char_to_num, num_to_char
+    
+    def load_video(self, video_file, max_frames=75):
+        inputs , _, _ = read_video(video_file)
         #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
-        inputs = torch.mean(inputs.float() / 255, dim=1, keepdim=True)
-        #inputs = np.stack(inputs, 0) / 255.0
-        #batch_img = inputs[:, :, :, 0]  # 29, h, w
-
-
-
+        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True)
         num_frames, c, h, w = inputs.shape
-        if num_frames < 75:
-            padding = torch.zeros((75 - num_frames, c, h, w))
-            #breaks here
+
+        if 'train' in self.phases:
+            inputs = RandomDistort(inputs, self.args['max_magnitude'])
+            inputs, remaining_list = RandomFrameDrop(inputs, num_frames)
+            #batch_img = RandomCrop(batch_img, shaking_prob=self.args.shaking_prob)
+            inputs = HorizontalFlip(inputs)  # prob 0.5
+            #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 29, 1 (C), h, w
+            inputs = self.color_jitter(inputs)
+
+        if num_frames < max_frames:
+            padding = torch.zeros((max_frames - num_frames, c, h, w))
             inputs = torch.cat((inputs, padding), dim=0)
-            batch_img_padded = inputs
         else:
-            batch_img_padded = inputs[:75]
-            #batch_img_padded = batch_img
+            inputs = inputs[:max_frames]
+        
+        #batch_img_padded = batch_img
         #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 75, 1 (C), h, w
         
-        #if 'train' in self.phases:
-            #batch_img = RandomDistort(batch_img, self.args.max_magnitude)
-            #batch_img, remaining_list = RandomFrameDrop(batch_img, tensor.get('duration'))
-            #batch_img = RandomCrop(batch_img, shaking_prob=self.args.shaking_prob)
-            #batch_img = HorizontalFlip(batch_img)  # prob 0.5
-            #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 29, 1 (C), h, w
-            #batch_img = self.color_jitter(batch_img)
+        
         #else:
             #batch_img = CenterCrop(batch_img, (88, 88))
             #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])
+        return inputs
 
-
-        # Load label data
+    def extract_label(self, label_file, max_labels_length=40):
+        #TODO:must be converterd in numbers
         with open(label_file, 'r') as f:
             lines = f.readlines()
             labels = []
@@ -75,14 +94,20 @@ class MyDataset(Dataset):
                 labels.append(word)
             durations = end
             labels = " ".join(labels)
+        # Convert the words into a list of numbers
+        numerical_representation = [self.char_to_num[char] for char in labels]
+        label_len = len(numerical_representation)
+        numerical_representation = torch.tensor(numerical_representation)
 
-        result = {}
-        result['video'] = batch_img_padded
-        result['label'] = labels
+        if label_len < max_labels_length:
+            labels_padding = torch.zeros((max_labels_length - label_len))
+            #breaks here
+            padded_labels = torch.cat((numerical_representation, labels_padding), dim=0)
+        else:
+            padded_labels = numerical_representation[:max_labels_length]
+
         #TODO: fix duration, it's an unkowk number
-        result['duration'] = torch.tensor((0,1))
-
-        return result
+        return padded_labels, torch.tensor((0,1))
 
     def __len__(self):
         return len(self.video_files)
