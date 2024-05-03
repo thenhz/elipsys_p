@@ -54,15 +54,17 @@ class MyDataset(Dataset):
         inputs , _, _ = read_video(video_file)
         #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
         inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True)
-        num_frames, c, h, w = inputs.shape
+        num_frames, h, w, c = inputs.shape
+        #needed just because I'm feeding straight the loaded data to the model
+        inputs = inputs.permute(0, 3, 1, 2)
 
-        if 'train' in self.phases:
+        """ if 'train' in self.phases:
             inputs = RandomDistort(inputs, self.args['max_magnitude'])
             inputs, remaining_list = RandomFrameDrop(inputs, num_frames)
             #batch_img = RandomCrop(batch_img, shaking_prob=self.args.shaking_prob)
             inputs = HorizontalFlip(inputs)  # prob 0.5
             #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 29, 1 (C), h, w
-            inputs = self.color_jitter(inputs)
+            inputs = self.color_jitter(inputs) """
 
         if num_frames < max_frames:
             padding = torch.zeros((max_frames - num_frames, c, h, w))
