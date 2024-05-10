@@ -128,6 +128,9 @@ def train():
     tot_iter = 0
     scaler = GradScaler()     
     tic = time.time()  
+
+    criterion = nn.CTCLoss(blank=0, zero_infinity=True) # 0 is conventionally used for blank class in CTC
+    
     for epoch in range(max_epoch):
         for phase in ['train', 'val']:
             dataset = MyDataset(args['video_dir'], args['label_dir'],[phase], args)
@@ -136,23 +139,26 @@ def train():
             loader = DataLoader(dataset, batch_size=args['batch'], shuffle=True)
             for (i_iter, input) in enumerate(loader):
                          
-                batch_length = len(input.get('duration'))
-
                 videos = input.get('video').to(device)
-                borders = input.get('duration').to(device)
-
-                with autocast():    
-                    embeddings = video_model(videos,borders)          
-                group_a_embeddings =  F.normalize(embeddings[odd_indexes[:batch_length//2]] , dim=-1) 
-                group_b_embeddings = F.normalize(embeddings[even_indexes[:batch_length//2]] , dim=-1) 
-                logits = (group_a_embeddings @ group_b_embeddings.T) / args['temperture']
-                loss = cross_entropy(logits, torch.eye(batch_length//2).to(device), reduction='none')
-                loss = loss.mean() 
+                input_len = input.get('input_len').to(device)
+                labels = input.get('label').to(device) # Labels should be [batch, seq_len]
+                label_lengths = input.get('output_len').to(device) # size: [batch]
+                #with autocast():
+                output = video_model(videos,input_len)  # Model outputs are [batch, seq_len, num_classes]
+                
+                output_reshaped = torch.permute(output,(1,0,2)) # seq_len, batch, num_classes
+                # Here, the targets are labels, input_lengths are output_lengths, and target_lengths are label_lengths
+                loss = criterion(output_reshaped.log_softmax(2).detach().requires_grad_(), labels, input_len, label_lengths)
+                 
                 if phase == 'train':
-                    optimizer.zero_grad()   
+                    """ optimizer.zero_grad()   
                     scaler.scale(loss).backward()  
                     scaler.step(optimizer)
-                    scaler.update()
+                    scaler.update() """
+
+                    # Backward pass and optimize
+                    loss.backward()
+                    optimizer.step()
 
                     toc = time.time()
                     msg = 'epoch={}, train_iter={}, eta={:.1f}s'.format(epoch, tot_iter, (toc-tic)*(len(loader)-i_iter))     

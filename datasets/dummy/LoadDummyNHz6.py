@@ -37,8 +37,8 @@ class MyDataset(Dataset):
         label_file = self.label_files[idx]
 
         result = {}
-        result['video'] = self.load_video(video_file)
-        result['label'], result['duration'] = self.extract_label(label_file) 
+        result['video'], result['input_len'] = self.load_video(video_file)
+        result['label'], result['output_len']  = self.extract_label(label_file) 
 
         return result
 
@@ -51,12 +51,12 @@ class MyDataset(Dataset):
         return char_to_num, num_to_char
     
     def load_video(self, video_file, max_frames=75):
-        inputs , _, _ = read_video(video_file)
+        inputs , _, _ = read_video(video_file) #T,W,H,C(3)
         #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
-        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True)
+        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True) #T,W,H,C(1) made a grey image
         num_frames, h, w, c = inputs.shape
         #needed just because I'm feeding straight the loaded data to the model
-        inputs = inputs.permute(0, 3, 1, 2)
+        inputs = inputs.permute(0, 3, 1, 2) #T,C,H,W
 
         """ if 'train' in self.phases:
             inputs = RandomDistort(inputs, self.args['max_magnitude'])
@@ -79,7 +79,7 @@ class MyDataset(Dataset):
         #else:
             #batch_img = CenterCrop(batch_img, (88, 88))
             #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])
-        return inputs
+        return inputs, torch.tensor(num_frames)
 
     def extract_label(self, label_file, max_labels_length=40):
         #TODO:must be converterd in numbers
@@ -109,7 +109,7 @@ class MyDataset(Dataset):
             padded_labels = numerical_representation[:max_labels_length]
 
         #TODO: fix duration, it's an unkowk number
-        return padded_labels, torch.tensor((0,1))
+        return padded_labels, torch.tensor(label_len)
 
     def __len__(self):
         return len(self.video_files)

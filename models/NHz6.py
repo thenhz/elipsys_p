@@ -221,9 +221,11 @@ class NHz6(nn.Module):
             f_v = self.video_cnn(v)  
             f_v = self.dropout(f_v)        
         
-        border = border[:,:,None]
+        #TODO: da capire se serve questo
+        #border = border[:,:,None]
         h, _ = self.gru(f_v)
-        y_v = self.prejection_head(h).mean(1)
+        #TODO: perchè fa mean(1)????
+        y_v = self.prejection_head(h)
 
         return y_v
 

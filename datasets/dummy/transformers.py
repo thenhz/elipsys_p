@@ -53,13 +53,13 @@ def RandomCrop(batch_img, shaking_prob = 0.2):
     return cropped_batch_img
 
 def HorizontalFlip(batch_img):
-    if random.random() > 0.5:
+    if random.random() > 0:
         batch_img = np.ascontiguousarray(batch_img[:,:,::-1])
     return batch_img
 
 def RandomFrameDrop(batch_img, duration):
     remaining_list = range(29)
-    if random.random() > 0.5:
+    if random.random() > 0:
         drop_margin = int((29 - duration.sum() * 0.8 ) / 2) 
         drop_start = random.randint(0, drop_margin) 
         drop_end = random.randint(0, drop_margin)
@@ -77,8 +77,8 @@ def get_of_fisheye(H, W, center, magnitude):
     grid += d * d_sum.unsqueeze(-1) * magnitude 
     return grid.unsqueeze(0)
 
-def RandomDistort(batch_img, max_magnitude): 
-    if random.random() > 0.5:
+def RandomDistort(batch_img, max_magnitude):
+    if random.random() > 0:
         w, h = batch_img.shape[2], batch_img.shape[1]
         center_x = (random.random() - 0.5) * 2
         center_y = random.random() * 0.25 - 1.5
