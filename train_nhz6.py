@@ -8,11 +8,11 @@ import os
 
 import numpy as np
 import time
+from datasets.dummy_dataset import DummyDataset
 from models.NHz6 import *
 import torch.optim as optim 
 
 from torch.cuda.amp import autocast, GradScaler
-from datasets.dummy.LoadDummyNHz6 import MyDataset
 import shutil
 import yaml
 
@@ -133,7 +133,7 @@ def train():
     
     for epoch in range(max_epoch):
         for phase in ['train', 'val']:
-            dataset = MyDataset(args['video_dir'], args['label_dir'],[phase], args)
+            dataset = DummyDataset(args['video_dir'], args['label_dir'],[phase], args)
             print(f'Start {phase} phase, dataset size:',len(dataset))
             #loader = dataset2dataloader(dataset, args['batch'], args['num_workers'], mode=phase)
             loader = DataLoader(dataset, batch_size=args['batch'], shuffle=True)

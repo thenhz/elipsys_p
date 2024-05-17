@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from blazebase import BlazeLandmark, BlazeBlock
+from .blazebase import BlazeLandmark, BlazeBlock
 
 class BlazeFaceLandmark(BlazeLandmark):
     """The face landmark model from MediaPipe.

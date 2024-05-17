@@ -11,10 +11,12 @@ from torchvision.io import read_video
 import torch.nn.functional as F
 
 from datasets.dummy.transformers import *
+from datasets.facelandmark.mediapipe.mouth_cropper import MouthCropper
 
 
 
-class MyDataset(Dataset):
+
+class DummyDataset(Dataset):
 
     def __init__(self, video_dir, label_dir, phases, args):
         self.video_dir = video_dir
@@ -31,6 +33,7 @@ class MyDataset(Dataset):
         # Create a mapping from words to numbers
         vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
         self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
+        self.mouth_cropper = MouthCropper()
 
     def __getitem__(self, idx):
         video_file = self.video_files[idx]
@@ -51,7 +54,8 @@ class MyDataset(Dataset):
         return char_to_num, num_to_char
     
     def load_video(self, video_file, max_frames=75):
-        inputs , _, _ = read_video(video_file) #T,W,H,C(3)
+        #inputs , _, _ = read_video(video_file) #T,H,W,C(3)
+        inputs = self.mouth_cropper.crop_video(video_file) #T,H,W,C(3)
         #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
         inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True) #T,W,H,C(1) made a grey image
         num_frames, h, w, c = inputs.shape

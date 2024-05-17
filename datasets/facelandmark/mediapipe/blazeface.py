@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from blazebase import BlazeDetector, BlazeBlock, FinalBlazeBlock
+from .blazebase import BlazeDetector, BlazeBlock, FinalBlazeBlock
 
 
 class BlazeFace(BlazeDetector):
