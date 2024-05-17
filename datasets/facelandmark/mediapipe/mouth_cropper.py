@@ -32,24 +32,30 @@ class MouthCropper:
                 x_coordinates = [point[0] for point in lip_points]
                 y_coordinates = [point[1] for point in lip_points]
 
+                min_x = min(x_coordinates)
+                max_x = max(x_coordinates)
+                min_y = min(y_coordinates)
+                max_y = max(y_coordinates)
+
                 # Calculate width of bounding box
-                width = int(max(x_coordinates) - min(x_coordinates))
+                width = int(max_x - min_x)
+                height = int(max_y - min_y)
 
                 # Calculate the center of the bounding box
-                center_x = min(x_coordinates) + width // 2
-                center_y = min(y_coordinates) + width // 2  # Use width as height because the mouth is approximately in the center
+                center_x = min_x + width // 2
+                center_y = min_y + height // 2
 
                 # Calculate new dimensions based on a fixed amount around the center
-                start_x = int(center_x - width // 2)  
-                start_y = int(center_y - width // 2)  
-                end_x = start_x + width
-                end_y = start_y + width
+                start_x = int(center_x - size[0] // 2)  
+                start_y = int(center_y - size[1] // 2)  
+                end_x = start_x + size[0]
+                end_y = start_y + size[1]
 
                 mouth_region = frame[start_y:end_y, start_x:end_x]
 
-                mouth_region_resized = cv2.resize(mouth_region, size)
+                #mouth_region_resized = cv2.resize(mouth_region, size)
 
-        return mouth_region_resized
+        return mouth_region
 
     def crop_video(self, video_file_path):
         frames = []
