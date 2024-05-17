@@ -57,7 +57,7 @@ class DummyDataset(Dataset):
         #inputs , _, _ = read_video(video_file) #T,H,W,C(3)
         inputs = self.mouth_cropper.crop_video(video_file) #T,H,W,C(3)
         #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
-        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True) #T,W,H,C(1) made a grey image
+        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True) #T,H,W,C(1) made a grey image
         num_frames, h, w, c = inputs.shape
         #needed just because I'm feeding straight the loaded data to the model
         inputs = inputs.permute(0, 3, 1, 2) #T,C,H,W
@@ -83,6 +83,7 @@ class DummyDataset(Dataset):
         #else:
             #batch_img = CenterCrop(batch_img, (88, 88))
             #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])
+        #make tensors to require grad
         return inputs, torch.tensor(num_frames)
 
     def extract_label(self, label_file, max_labels_length=40):
@@ -112,7 +113,6 @@ class DummyDataset(Dataset):
         else:
             padded_labels = numerical_representation[:max_labels_length]
 
-        #TODO: fix duration, it's an unkowk number
         return padded_labels, torch.tensor(label_len)
 
     def __len__(self):

@@ -157,7 +157,7 @@ def train():
                     scaler.update() """
 
                     # Backward pass and optimize
-                    loss.backward()
+                    loss.requires_grad_().backward()
                     optimizer.step()
 
                     toc = time.time()
