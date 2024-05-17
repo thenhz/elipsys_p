@@ -91,11 +91,11 @@ class MouthCropper:
             xc, yc, scale, theta = self.face_detector.detection2roi(face_detections.cpu())
             img, affine, box = self.face_regressor.extract_roi(frame, xc, yc, theta, scale)
             flags, normalized_landmarks = self.face_regressor(img.to(self.gpu))
-            landmarks = self.face_regressor.denormalize_landmarks(normalized_landmarks.cpu(), affine)
-
-            cropped_img = self.get_mouth_region(frame,landmarks, flags)
-
-            frames.append(cropped_img)
+            if len(flags) > 0:
+                landmarks = self.face_regressor.denormalize_landmarks(normalized_landmarks.cpu(), affine)
+                cropped_img = self.get_mouth_region(frame,landmarks, flags)
+                frames.append(cropped_img)
+                
             hasFrame, frame = capture.read()
 
         capture.release()
