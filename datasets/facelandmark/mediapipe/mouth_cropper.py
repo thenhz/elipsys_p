@@ -51,10 +51,23 @@ class MouthCropper:
                 end_x = start_x + size[0]
                 end_y = start_y + size[1]
 
+                # Verify the points are within the limit and if not set them to the limit
+                start_x = max(0, start_x)
+                start_y = max(0, start_y)
+                end_x = min(frame.shape[1], end_x)
+                end_y = min(frame.shape[0], end_y)
+
+                # Extract the region
                 mouth_region = frame[start_y:end_y, start_x:end_x]
 
-                #mouth_region_resized = cv2.resize(mouth_region, size)
+                # pad if the size doesn't match
+                dy, dx = end_y - start_y, end_x - start_x
+                if dx != size[0] or dy != size[1]:
+                    mouth_region = cv2.copyMakeBorder(mouth_region, max(0, start_y - 0), max(0, end_y - frame.shape[0]), 
+                                                    max(0, start_x - 0), max(0, end_x - frame.shape[1]), 
+                                                    cv2.BORDER_CONSTANT)
 
+                # mouth_region_resized = cv2.resize(mouth_region, size)
         return mouth_region
 
     def crop_video(self, video_file_path):
