@@ -72,8 +72,7 @@ def train():
                 labels = input.get('label').to(device) # Labels should be [batch, seq_len]
                 label_lengths = input.get('output_len').to(device) # size: [batch]
                 #with autocast():
-                output = video_model(videos,input_len)  # Model outputs are [batch, seq_len, num_classes]
-                
+                output = video_model(videos,input_len)  # Model outputs are [batch, seq_len, num_classes]                
                 output_reshaped = torch.permute(output,(1,0,2)) # seq_len, batch, num_classes
                 # Here, the targets are labels, input_lengths are output_lengths, and target_lengths are label_lengths
                 loss = criterion(output_reshaped.log_softmax(2).detach().requires_grad_(), labels, input_len, label_lengths)
