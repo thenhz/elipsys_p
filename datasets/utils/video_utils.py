@@ -9,7 +9,7 @@ def save_numpy_video(frames, filename, size):
     for frame in frames:
         
         #frame = frame.numpy()  # Convert from Torch Tensor back to numpy
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert back to BGR for opencv
+        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert back to BGR for opencv
         out.write(frame)
 
     out.release()

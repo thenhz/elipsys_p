@@ -28,7 +28,7 @@ class DummyDataset(Dataset):
         self.video_files = []
         self.label_files = []
 
-        self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
+        self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))
         self.label_files += glob.glob(os.path.join(label_dir, '*.align'))
         # Create a mapping from words to numbers
         vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
@@ -40,7 +40,7 @@ class DummyDataset(Dataset):
         label_file = self.label_files[idx]
 
         result = {}
-        result['video'], result['input_len'] = self.load_video(video_file)
+        result['video'], result['input_len'] = torch.load(video_file)
         result['label'], result['output_len']  = self.extract_label(label_file) 
 
         return result
@@ -52,39 +52,6 @@ class DummyDataset(Dataset):
             char_to_num[char] = i
             num_to_char[i] = char
         return char_to_num, num_to_char
-    
-    def load_video(self, video_file, max_frames=75):
-        #inputs , _, _ = read_video(video_file) #T,H,W,C(3)
-        inputs = self.mouth_cropper.crop_video(video_file) #T,H,W,C(3)
-        #inputs = [jpeg.decode(img, pixel_format=TJPF_GRAY) for img in inputs]
-        inputs = torch.mean(inputs.float() / 255, dim=3, keepdim=True) #T,H,W,C(1) made a grey image
-        num_frames, h, w, c = inputs.shape
-        #needed just because I'm feeding straight the loaded data to the model
-        inputs = inputs.permute(0, 3, 1, 2) #T,C,H,W
-
-        """ if 'train' in self.phases:
-            inputs = RandomDistort(inputs, self.args['max_magnitude'])
-            inputs, remaining_list = RandomFrameDrop(inputs, num_frames)
-            #batch_img = RandomCrop(batch_img, shaking_prob=self.args.shaking_prob)
-            inputs = HorizontalFlip(inputs)  # prob 0.5
-            #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 29, 1 (C), h, w
-            inputs = self.color_jitter(inputs) """
-
-        if num_frames < max_frames:
-            padding = torch.zeros((max_frames - num_frames, c, h, w))
-            inputs = torch.cat((inputs, padding), dim=0)
-        else:
-            inputs = inputs[:max_frames]
-        
-        #batch_img_padded = batch_img
-        #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])  # 75, 1 (C), h, w
-        
-        
-        #else:
-            #batch_img = CenterCrop(batch_img, (88, 88))
-            #batch_img_padded = torch.FloatTensor(batch_img_padded[:, np.newaxis, ...])
-        #make tensors to require grad
-        return inputs, torch.tensor(num_frames)
 
     def extract_label(self, label_file, max_labels_length=40):
         #TODO:must be converterd in numbers
