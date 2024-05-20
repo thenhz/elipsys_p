@@ -1,5 +1,5 @@
 batch: 2
-video_dir: "/code/datasets/eLipSys/data/s1"
+video_dir: "/code/datasets/eLipSys/data/s1/preprocessed"
 label_dir: "/code/datasets/eLipSys/data/alignments/s1"
 vocab_size: 40
 shape: [1,75,46,140]

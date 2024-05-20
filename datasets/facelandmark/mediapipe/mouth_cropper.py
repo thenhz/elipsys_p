@@ -3,7 +3,7 @@ import torch
 import cv2
 import sys
 
-from datasets.utils.video_utils import save_numpy_video
+#from datasets.utils.video_utils import save_numpy_video
 
 from .blazebase import resize_pad, denormalize_detections
 from .blazeface_landmark import BlazeFaceLandmark
