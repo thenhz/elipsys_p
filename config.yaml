@@ -1,9 +1,8 @@
-batch: 2
+batch: 64
 video_dir: "/code/datasets/eLipSys/data/s1/preprocessed"
 label_dir: "/code/datasets/eLipSys/data/alignments/s1"
 vocab_size: 40
 shape: [1,75,46,140]
-
 gpus : '1'
 lr : 0.00002
 n_dimention : 500

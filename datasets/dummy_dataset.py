@@ -28,8 +28,16 @@ class DummyDataset(Dataset):
         self.video_files = []
         self.label_files = []
 
-        self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))
-        self.label_files += glob.glob(os.path.join(label_dir, '*.align'))
+        if self.phases == 'train':
+            self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))
+        elif self.phases == 'val':
+            self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))[:8]
+        else:
+            raise ValueError("Invalid phase. It should be either 'train' or 'val'.")
+
+        # Create label_files list matching video_files names but with '.align' extension
+        self.label_files = [f"{os.path.splitext(os.path.basename(video_file))[0]}.align" for video_file in self.video_files]
+        self.label_files = [os.path.join(self.label_dir, label_file) for label_file in self.label_files]
         # Create a mapping from words to numbers
         vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
         self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
@@ -54,7 +62,6 @@ class DummyDataset(Dataset):
         return char_to_num, num_to_char
 
     def extract_label(self, label_file, max_labels_length=40):
-        #TODO:must be converterd in numbers
         with open(label_file, 'r') as f:
             lines = f.readlines()
             labels = []
