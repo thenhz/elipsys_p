@@ -23,38 +23,33 @@ def train_one_epoch(epoch_index, tb_writer):
     running_loss = 0.
     last_loss = 0.
 
-    # Here, we use enumerate(training_loader) instead of
-    # iter(training_loader) so that we can track the batch
-    # index and do some intra-epoch reporting
     for i, data in enumerate(training_loader):
 
-        videos = data.get('video').to(device)
-        input_len = data.get('input_len').to(device)
-        labels = data.get('label').to(device) # Labels should be [batch, seq_len]
-        label_lengths = data.get('output_len').to(device) # size: [batch]
-
-        batch_size = videos.size()[0]
+        videos = data['video'].to(device)
+        input_len = data['input_len'].to(device)
+        labels = data['label'].to(device)
+        label_lengths = data['output_len'].to(device)
 
         # Zero your gradients for every batch!
         optimizer.zero_grad()
 
         # Make predictions for this batch
-        outputs = model(videos,input_len)
-        outputs_reshaped = torch.permute(outputs,(1,0,2)) # seq_len, batch, num_classes
-                
+        outputs = model(videos, input_len)
+        outputs_reshaped = torch.permute(outputs, (1, 0, 2))  # seq_len, batch, num_classes
+
         # Compute the loss and its gradients
-        loss = loss_fn(outputs_reshaped.log_softmax(2).detach().requires_grad_(), labels, input_len, label_lengths)
-        loss.requires_grad_().backward()
+        loss = loss_fn(outputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
+        loss.backward()
+
         # Adjust learning weights
         optimizer.step()
 
         # Gather data and report
         running_loss += loss.item()
-        last_loss = running_loss # loss per batch
+        last_loss = running_loss / (i + 1)  # average loss per batch
         print('  batch {} loss: {}'.format(i + 1, last_loss))
         tb_x = epoch_index * len(training_loader) + i + 1
         tb_writer.add_scalar('Loss/train', last_loss, tb_x)
-        running_loss = 0.
 
     return last_loss
 
@@ -101,43 +96,33 @@ best_vloss = 1_000_000.
 for epoch in range(EPOCHS):
     print('EPOCH {}:'.format(epoch_number + 1))
 
-    # Make sure gradient tracking is on, and do a pass over the data
     model.train(True)
     avg_loss = train_one_epoch(epoch_number, writer)
 
-
     running_vloss = 0.0
-    # Set the model to evaluation mode, disabling dropout and using population
-    # statistics for batch normalization.
+
     model.eval()
 
-    # Disable gradient computation and reduce memory consumption.
     with torch.no_grad():
         for i, vdata in enumerate(validation_loader):
-            videos = vdata.get('video').to(device)
-            input_len = vdata.get('input_len').to(device)
-            labels = vdata.get('label').to(device) # Labels should be [batch, seq_len]
-            label_lengths = vdata.get('output_len').to(device) # size: [batch]
-            
-            #vinputs, vlabels = vdata
-            voutputs = model(videos,input_len)
-            voutputs_reshaped = torch.permute(voutputs,(1,0,2)) # seq_len, batch, num_classes
-            vloss = loss_fn(voutputs_reshaped.log_softmax(2).detach().requires_grad_(), labels, input_len, label_lengths)
-            running_vloss += vloss
+            videos = vdata['video'].to(device)
+            input_len = vdata['input_len'].to(device)
+            labels = vdata['label'].to(device)
+            label_lengths = vdata['output_len'].to(device)
 
-
+            voutputs = model(videos, input_len)
+            voutputs_reshaped = torch.permute(voutputs, (1, 0, 2))
+            vloss = loss_fn(voutputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
+            running_vloss += vloss.item()
 
     avg_vloss = running_vloss / (i + 1)
     print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
 
-    # Log the running loss averaged per batch
-    # for both training and validation
     writer.add_scalars('Training vs. Validation Loss',
-                    { 'Training' : avg_loss, 'Validation' : avg_vloss },
-                    epoch_number + 1)
+                       {'Training': avg_loss, 'Validation': avg_vloss},
+                       epoch_number + 1)
     writer.flush()
 
-    # Track best performance, and save the model's state
     if avg_vloss < best_vloss:
         best_vloss = avg_vloss
         model_path = 'elipsys_{}_{}'.format(timestamp, epoch_number)

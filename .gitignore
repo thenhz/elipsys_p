@@ -4,3 +4,5 @@
 test_sample
 tensorboard
 checkpoints
+data
+runs

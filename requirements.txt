@@ -1,1 +1,4 @@
 PyAV
+opencv-python
+tensorboard
+torch-tb-profiler
