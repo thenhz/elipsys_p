@@ -72,9 +72,9 @@ scaler = GradScaler()
 experiment = Experiment(
     api_key=os.getenv("EXPERIMENT_API_KEY"),
     project_name="eLipSys_NHz7",
-    auto_histogram_weight_logging=True,
-    auto_histogram_gradient_logging=True,
-    auto_histogram_activation_logging=True
+    #auto_histogram_weight_logging=True,
+    #auto_histogram_gradient_logging=True,
+    #auto_histogram_activation_logging=True
     )
 
 
@@ -90,6 +90,7 @@ if args['gpus'] > 1:
 lr = args['batch'] / 32.0 / torch.cuda.device_count() * args['lr']
 optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 loss_fn = nn.CTCLoss(blank=0, zero_infinity=True)  # 0 is conventionally used for blank class in CTC
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.5)
 
 # Log hyperparameters to Comet.ml
 experiment.log_parameters(args)
@@ -135,6 +136,25 @@ with experiment.train():
         # Log training and validation loss to Comet.ml
         experiment.log_metric("train_loss", avg_loss, epoch=epoch_number + 1)
         experiment.log_metric("valid_loss", avg_vloss, epoch=epoch_number + 1)
+
+        # Get gradients
+        gradients = {}
+        for name, param in model.named_parameters():
+            if "feature_extractor" not in name:
+                if param.grad is not None:
+                    gradients[name] = param.grad.detach()
+
+        for name, gradient in gradients.items():
+            experiment.log_histogram_3d(gradient.cpu().numpy(), name=f"gggradient_{name}", step=epoch_number + 1)
+
+        # Log learning rate to Comet.ml
+        for param_group in optimizer.param_groups:
+            lr = param_group['lr']
+            experiment.log_metric("learning_rate", lr, epoch=epoch_number + 1)
+            break  # Assuming all param_groups have the same learning rate
+
+        # Adjust learning rate based on validation loss
+        scheduler.step(avg_vloss)
 
         if avg_vloss < best_vloss:
             best_vloss = avg_vloss

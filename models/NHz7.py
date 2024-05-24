@@ -19,7 +19,7 @@ class NHz7(nn.Module):
 
         # Pretrained feature extractor
         if pretrained_model == 'resnet18':
-            self.feature_extractor = models.resnet18(pretrained=True)
+            self.feature_extractor = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
             self.feature_extractor.fc = nn.Identity()  # Remove the last fully connected layer
             feature_dim = 512  # Dimension of the output features from ResNet
         elif pretrained_model == 'efficientnet_v2':

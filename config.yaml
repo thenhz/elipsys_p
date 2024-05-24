@@ -1,5 +1,5 @@
 #hardware params
-gpus : '1'
+gpus : 1
 num_workers : 4
 
 #network params
@@ -15,6 +15,7 @@ n_dimention : 500
 lr : 0.00002
 max_epoch : 100
 save_prefix : "checkpoint"
+short_train : False
 
 #loader params
 video_dir: "/code/datasets/eLipSys/data/s1"

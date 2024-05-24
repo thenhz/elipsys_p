@@ -32,6 +32,8 @@ class DummyDataset(Dataset):
 
         if self.phases == 'train':
             self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
+            if self.args['short_train']:
+                self.video_files = self.video_files[:32]
         elif self.phases == 'val':
             self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))[:8]
         else:
