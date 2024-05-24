@@ -13,6 +13,10 @@ import os
 
 from datasets.dummy_dataset import DummyDataset
 from models.NHz7 import NHz7
+from torch.cuda.amp import GradScaler, autocast
+
+with open('config.yaml', 'r') as file:
+    args = yaml.safe_load(file)
 
 def train_one_epoch(epoch_index, experiment):
     running_loss = 0.0
@@ -27,11 +31,14 @@ def train_one_epoch(epoch_index, experiment):
         optimizer.zero_grad()
 
         # Forward + backward + optimize
-        outputs = model(inputs, input_len)
-        outputs_reshaped = torch.permute(outputs, (1, 0, 2))
-        loss = loss_fn(outputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
-        loss.backward()
-        optimizer.step()
+        with autocast():
+            outputs = model(inputs, input_len)
+            outputs_reshaped = torch.permute(outputs, (1, 0, 2))
+            loss = loss_fn(outputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         # Gather data and report
         running_loss += loss.item()
@@ -59,7 +66,7 @@ def get_data_loaders(args):
              )
     return training_loader, validation_loader
 
-
+scaler = GradScaler()
 # Initialize Comet.ml
 #init()
 experiment = Experiment(
@@ -70,14 +77,13 @@ experiment = Experiment(
     auto_histogram_activation_logging=True
     )
 
-with open('config.yaml', 'r') as file:
-    args = yaml.safe_load(file)
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Initializing in a separate cell so we can easily add more epochs to the same run
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 model = NHz7(args['vocab_size'], hidden_size=512, num_layers=1, pretrained_model=args['model_name']).to(device)
-if len(args['gpus']) > 1:
+if args['gpus'] > 1:
     print("parallelling model...")
     model =  nn.DataParallel(model)
 
@@ -117,9 +123,10 @@ with experiment.train():
                 labels = vdata['label'].to(device)
                 label_lengths = vdata['output_len'].to(device)
 
-                voutputs = model(videos, input_len)
-                voutputs_reshaped = torch.permute(voutputs, (1, 0, 2))
-                vloss = loss_fn(voutputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
+                with autocast():
+                    voutputs = model(videos, input_len)
+                    voutputs_reshaped = torch.permute(voutputs, (1, 0, 2))
+                    vloss = loss_fn(voutputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
                 running_vloss += vloss.item()
 
         avg_vloss = running_vloss / (i + 1)
