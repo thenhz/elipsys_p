@@ -63,7 +63,7 @@ def get_data_loaders(args):
 # Initialize Comet.ml
 #init()
 experiment = Experiment(
-    api_key="4zK0F8ekmeNyoaGn0qUTHvxfD",
+    api_key=os.getenv("EXPERIMENT_API_KEY"),
     project_name="eLipSys_NHz7",
     auto_histogram_weight_logging=True,
     auto_histogram_gradient_logging=True,

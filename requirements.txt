@@ -1,4 +1,4 @@
 PyAV
 opencv-python
-tensorboard
+comet_ml
 torch-tb-profiler
