@@ -9,7 +9,7 @@ import os
 import numpy as np
 import time
 from datasets.dummy_dataset import DummyDataset
-from models.NHz6 import *
+from models.NHz7 import *
 import torch.optim as optim 
 
 from torch.cuda.amp import autocast, GradScaler
@@ -77,7 +77,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Initializing in a separate cell so we can easily add more epochs to the same run
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 writer = SummaryWriter('tensorboard/eLipSys_trainer_{}'.format(timestamp))
-model = NHz6(args).to(device)
+model = NHz7(args['vocab_size'],hidden_size=512, num_layers=1, pretrained_model='resnet18').to(device)
 
 lr = args['batch'] / 32.0 / torch.cuda.device_count() * args['lr']
 optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay=1e-4)  

@@ -7,11 +7,11 @@ import os
 from torch.utils.data import Dataset
 import torch
 import torchvision
-from torchvision.io import read_video
+from torchvision.io import read_video,write_video
 import torch.nn.functional as F
+from fractions import Fraction
 
 from datasets.utils.transformers import *
-from datasets.facelandmark.mediapipe.mouth_cropper import MouthCropper
 
 
 
@@ -23,15 +23,17 @@ class DummyDataset(Dataset):
         self.label_dir = label_dir
         self.phases = phases
         self.args = args
+        self.video_resize_format = args['video_resize_format']
+        self.max_frames_per_video = args['max_frames_per_video']
         self.color_jitter = torchvision.transforms.ColorJitter(0.3, 0.3, 0.3)
 
         self.video_files = []
         self.label_files = []
 
         if self.phases == 'train':
-            self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))
+            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
         elif self.phases == 'val':
-            self.video_files += glob.glob(os.path.join(video_dir, '*.pth'))[:8]
+            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))[:8]
         else:
             raise ValueError("Invalid phase. It should be either 'train' or 'val'.")
 
@@ -41,17 +43,57 @@ class DummyDataset(Dataset):
         # Create a mapping from words to numbers
         vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
         self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
-        self.mouth_cropper = MouthCropper()
+        #self.mouth_cropper = MouthCropper()
 
     def __getitem__(self, idx):
         video_file = self.video_files[idx]
         label_file = self.label_files[idx]
 
         result = {}
-        result['video'], result['input_len'] = torch.load(video_file)
+        result['video'], result['input_len'] = self.load_video(video_file)
         result['label'], result['output_len']  = self.extract_label(label_file) 
 
         return result
+
+    def save_video(self, video_tensor, path, fps=24.0):
+        # Convert the video tensor back to [0, 255] and to uint8 type
+        video_tensor = (video_tensor * 255).byte()
+        
+        # Transpose the video tensor to (num_frames, height, width, channels)
+        video_tensor = video_tensor.permute(0, 2, 3, 1)
+        
+        
+        # Save the video
+        write_video(path, video_tensor, fps=fps)
+
+    def load_video(self, video_file):
+        # Read the video using torchvision.io.read_video
+        video, audio, info = read_video(video_file, output_format='TCHW', pts_unit='sec')
+        # Normalize the video frames to be in the range [0, 1]
+        video = video.float() / 255.0
+        if self.args['model_name'] == 'resnet18':
+            # Assume self.args contains attributes width and height for resizing
+            # resize_transform = torchvision.transforms.Resize((self.video_resize_format[1], self.video_resize_format[0]))
+            # Define the preprocessing steps
+            resize_transform = torchvision.transforms.Compose([
+                torchvision.transforms.Resize(256),                              # Resize to a slightly larger size
+                torchvision.transforms.CenterCrop(self.video_resize_format[1]),                          # Crop the center 224x224 pixels
+                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],     # Normalize with ImageNet mean
+                                    std=[0.229, 0.224, 0.225])       # Normalize with ImageNet std
+            ])
+        # Apply the resize transform to each frame in the video
+        video = torch.stack([resize_transform(frame) for frame in video])
+        # Count the real number of loaded frames
+        num_frames = video.shape[0]
+        # Pad with zeros or slice the video frames to match self.args.max_frames
+        if num_frames < self.max_frames_per_video:
+            padding = torch.zeros((self.max_frames_per_video - num_frames, video.shape[1], video.shape[2], video.shape[3]))
+            video = torch.cat((video, padding), dim=0)
+        else:
+            video = video[:self.max_frames_per_video]
+        #self.save_video(video, "video.mp4")
+        return video, torch.tensor(num_frames)
+
 
     def word_to_number_mapping(self, chars):
         char_to_num = {}

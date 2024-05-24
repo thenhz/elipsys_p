@@ -35,7 +35,7 @@ class NHz7(nn.Module):
         # Classification layer
         self.fc = nn.Linear(hidden_size, vocab_size)
 
-    def forward(self, x):
+    def forward(self, x, input_len):
         """
         Forward pass of the model.
 
