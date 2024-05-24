@@ -1,14 +1,21 @@
-batch: 64
-video_dir: "/code/datasets/eLipSys/data/s1/preprocessed"
-label_dir: "/code/datasets/eLipSys/data/alignments/s1"
-vocab_size: 40
-shape: [1,75,46,140]
+#hardware params
 gpus : '1'
-lr : 0.00002
-n_dimention : 500
-weights : None
-max_epoch : 100
-temperture : 0.07
 num_workers : 4
-save_prefix : 'checkpoints/'
-max_magnitude: 0.07
+
+#network params
+model_name: 'resnet18'
+#video_resize_format: [128,128] #blazenet
+video_resize_format: [224,224] #resnet18
+
+vocab_size: 40
+batch: 4
+n_dimention : 500
+
+#training params
+lr : 0.00002
+max_epoch : 100
+
+#loader params
+video_dir: "/code/datasets/eLipSys/data/s1"
+label_dir: "/code/datasets/eLipSys/data/alignments/s1"
+max_frames_per_video: 75
