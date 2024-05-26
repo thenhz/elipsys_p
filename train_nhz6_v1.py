@@ -185,9 +185,13 @@ with experiment.train():
                 decoded_truth = decode_predictions(torch.permute(labels.cpu(), (1, 0)), num_to_char)
                 decoded_predictions = greedy_ctc_decode(voutputs, input_len, num_to_char)
 
-                # Print or log the predictions (here we're just printing)
+                # Log the predictions to Comet.ml
                 for j, decoded in enumerate(decoded_predictions):
-                    print(f"Prediction for batch {i}, item {j}: {decoded_predictions[j]} \n target: {decoded_truth[j]}")
+                    # Log the predicted and true values
+                    experiment.log_text(decoded, step=epoch * len(validation_loader) + i, metadata={"type": "prediction", "batch": i, "item": j})
+                    experiment.log_text(decoded_truth[j], step=epoch * len(validation_loader) + i, metadata={"type": "truth", "batch": i, "item": j})
+                    if j == 2:
+                        break
 
         avg_vloss = running_vloss / (i + 1)
         print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
@@ -209,7 +213,7 @@ with experiment.train():
         # Log learning rate to Comet.ml
         for param_group in optimizer.param_groups:
             lr = param_group['lr']
-            experiment.log_metric("learning_rate", lr, epoch=epoch_number + 1)
+            experiment.log_metric("lllearning_rate", lr, epoch=epoch_number + 1)
             break  # Assuming all param_groups have the same learning rate
 
         # Adjust learning rate based on validation loss

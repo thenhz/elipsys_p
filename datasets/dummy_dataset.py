@@ -33,9 +33,9 @@ class DummyDataset(Dataset):
         if self.phases == 'train':
             self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
             if self.args['short_train']:
-                self.video_files = self.video_files[:32]
+                self.video_files = self.video_files[:args['batch']*2]
         elif self.phases == 'val':
-            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))[:8]
+            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))[:args['batch']*1]
         else:
             raise ValueError("Invalid phase. It should be either 'train' or 'val'.")
 
