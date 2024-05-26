@@ -64,7 +64,58 @@ def get_data_loaders(args):
                 batch_size=args['batch'],
                 shuffle=False
              )
-    return training_loader, validation_loader
+    return training_loader, validation_loader, train_ds.num_to_char
+
+def decode_predictions(preds, num_to_char):
+    """
+    Decode numeric predictions into strings using the num_to_char mapping.
+
+    Args:
+    - preds (torch.Tensor): predicted numeric labels
+    - num_to_char (dict): mapping from numeric labels to characters
+
+    Returns:
+    - decoded (list of str): decoded label strings
+    """
+    decoded_batch = []
+    for i in range(preds.shape[1]):
+        decoded = []
+        for p in preds[:,i]:
+            if int(p) in num_to_char:
+                decoded.append(num_to_char[int(p)])
+        decoded_batch.append(''.join(decoded))
+    return decoded_batch
+
+def greedy_ctc_decode(output, input_lengths, num_to_char):
+    """
+    Greedy CTC decode the output sequences.
+
+    Args:
+    - output (torch.Tensor): Output from the neural network of shape (batch_size, seq_len, vocab_size).
+    - input_lengths (torch.Tensor): Lengths of the input sequences.
+    - num_to_char (dict): Mapping from numeric labels to characters.
+
+    Returns:
+    - decoded (list of str): Decoded label strings.
+    """
+    decoded_batch = []
+    output = output.softmax(2).cpu()
+    for i in range(output.size(0)):
+        probs = output[i, :input_lengths[i]]  # Get the sequence outputs for the given input length
+        _, max_indices = torch.max(probs, dim=1)
+        chars = [num_to_char[idx.item()] for idx in max_indices]
+        decoded = []
+        previous_char = None
+        #TODO: perchè il num_to_char[0] è "a"? ho capito che facciamo padding così ma la "a" come la mappiamo?inoltre non docrei appendere 
+        for char in chars:
+            if char != previous_char and char != num_to_char[0]:  # skip blanks (conventionally mapped to 0)
+                decoded.append(char)
+            previous_char = char
+        
+        decoded_batch.append(''.join(decoded))
+
+    return decoded_batch
+
 
 scaler = GradScaler()
 # Initialize Comet.ml
@@ -95,7 +146,7 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, f
 # Log hyperparameters to Comet.ml
 experiment.log_parameters(args)
 
-training_loader, validation_loader = get_data_loaders(args)
+training_loader, validation_loader, num_to_char = get_data_loaders(args)
 
 epoch_number = 0
 
@@ -129,6 +180,14 @@ with experiment.train():
                     voutputs_reshaped = torch.permute(voutputs, (1, 0, 2))
                     vloss = loss_fn(voutputs_reshaped.log_softmax(2), labels, input_len, label_lengths)
                 running_vloss += vloss.item()
+                # Decode predictions
+                #predictions = voutputs_reshaped.argmax(dim=2)
+                decoded_truth = decode_predictions(torch.permute(labels.cpu(), (1, 0)), num_to_char)
+                decoded_predictions = greedy_ctc_decode(voutputs, input_len, num_to_char)
+
+                # Print or log the predictions (here we're just printing)
+                for j, decoded in enumerate(decoded_predictions):
+                    print(f"Prediction for batch {i}, item {j}: {decoded_predictions[j]} \n target: {decoded_truth[j]}")
 
         avg_vloss = running_vloss / (i + 1)
         print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
