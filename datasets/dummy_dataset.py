@@ -14,7 +14,18 @@ from fractions import Fraction
 from datasets.utils.transformers import *
 
 
+class ConsistentRandomPerspective:
+    def __init__(self, distortion_scale=0.5):
+        self.distortion_scale = distortion_scale
+        self.params = {}
 
+    def __call__(self, img):
+        if not self.params:
+            _ , width, height = img.shape
+            start_points, end_points = torchvision.transforms.RandomPerspective.get_params(width, height, self.distortion_scale)
+            self.params = {'startpoints': start_points, 'endpoints': end_points}
+        
+        return torchvision.transforms.functional.perspective(img, **self.params)
 
 class DummyDataset(Dataset):
 
@@ -73,18 +84,31 @@ class DummyDataset(Dataset):
         video, audio, info = read_video(video_file, output_format='TCHW', pts_unit='sec')
         # Normalize the video frames to be in the range [0, 1]
         video = video.float() / 255.0
+        augment_transform = torchvision.transforms.Compose([])
+
         if self.args['model_name'] == 'resnet18':
-            # Assume self.args contains attributes width and height for resizing
-            # resize_transform = torchvision.transforms.Resize((self.video_resize_format[1], self.video_resize_format[0]))
-            # Define the preprocessing steps
             resize_transform = torchvision.transforms.Compose([
-                torchvision.transforms.Resize(256),                              # Resize to a slightly larger size
-                torchvision.transforms.CenterCrop(self.video_resize_format[1]),                          # Crop the center 224x224 pixels
-                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],     # Normalize with ImageNet mean
-                                    std=[0.229, 0.224, 0.225])       # Normalize with ImageNet std
+                torchvision.transforms.Resize(256),                               # Resize to a slightly larger size
+                torchvision.transforms.CenterCrop(self.video_resize_format[1]),   # Crop the center 224x224 pixels
+                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],      # Normalize with ImageNet mean
+                                                 std=[0.229, 0.224, 0.225])      # Normalize with ImageNet std
             ])
-        # Apply the resize transform to each frame in the video
+            
+            # Add augmentation if in training phase
+            if self.phases == 'train':
+                flip_transform = torchvision.transforms.RandomHorizontalFlip(p=0.5)  # 50% chance to flip
+                distort_transform = torchvision.transforms.RandomApply([ConsistentRandomPerspective(distortion_scale=0.4)], p=0.5)  # Apply distortion with a probability of 50%
+                augment_transform = torchvision.transforms.Compose([
+                    flip_transform,
+                    distort_transform
+                ])
+        # Apply the resize transform first to each frame in the video
         video = torch.stack([resize_transform(frame) for frame in video])
+        
+        # Apply augmentation transform to each frame in the video if in training phase
+        if self.phases == 'train':
+            video = torch.stack([augment_transform(frame) for frame in video])
+
         # Count the real number of loaded frames
         num_frames = video.shape[0]
         # Pad with zeros or slice the video frames to match self.args.max_frames
