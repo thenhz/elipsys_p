@@ -29,9 +29,9 @@ class ConsistentRandomPerspective:
 
 class DummyDataset(Dataset):
 
-    def __init__(self, video_dir, label_dir, phases, args):
-        self.video_dir = video_dir
-        self.label_dir = label_dir
+    def __init__(self, args, phases):
+        self.video_dir = args['video_dir']
+        self.label_dir = args['label_dir']
         self.phases = phases
         self.args = args
         self.video_resize_format = args['video_resize_format']
@@ -42,11 +42,11 @@ class DummyDataset(Dataset):
         self.label_files = []
 
         if self.phases == 'train':
-            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))
+            self.video_files += glob.glob(os.path.join(self.video_dir, '*.mpg'))
             if self.args['short_train']:
                 self.video_files = self.video_files[:args['batch']*2]
         elif self.phases == 'val':
-            self.video_files += glob.glob(os.path.join(video_dir, '*.mpg'))[:args['batch']*1]
+            self.video_files += glob.glob(os.path.join(self.video_dir, '*.mpg'))[:args['batch']*1]
         else:
             raise ValueError("Invalid phase. It should be either 'train' or 'val'.")
 

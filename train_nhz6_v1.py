@@ -52,17 +52,19 @@ def train_one_epoch(epoch_index, experiment):
 
 def get_data_loaders(args):
     #TODO: si può fare con un solo argomento
-    train_ds = DummyDataset(args['video_dir'], args['label_dir'], "train", args)
-    val_ds = DummyDataset(args['video_dir'], args['label_dir'], "val", args)
+    train_ds = DummyDataset(args, "train")
+    val_ds = DummyDataset(args, "val")
     training_loader = DataLoader(
                 train_ds,
                 batch_size=args['batch'],
-                shuffle=True
+                shuffle=True,
+                num_workers=args['num_workers']
             )
     validation_loader = DataLoader(
                 val_ds,
                 batch_size=args['batch'],
-                shuffle=False
+                shuffle=False,
+                num_workers=args['num_workers']
              )
     return training_loader, validation_loader, train_ds.num_to_char
 
