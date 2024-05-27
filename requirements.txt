@@ -1,1 +1,4 @@
 PyAV
+opencv-python
+comet_ml
+torch-tb-profiler
