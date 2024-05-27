@@ -192,6 +192,7 @@ with experiment.train():
                     # Log the predicted and true values
                     experiment.log_text(decoded, step=epoch * len(validation_loader) + i, metadata={"type": "prediction", "batch": i, "item": j})
                     experiment.log_text(decoded_truth[j], step=epoch * len(validation_loader) + i, metadata={"type": "truth", "batch": i, "item": j})
+                    print(f"Epoch {epoch}, Item {j}:\nPrediction: {decoded}\nTruth: {decoded_truth[j]}")
                     if j == 2:
                         break
 
@@ -215,7 +216,7 @@ with experiment.train():
         # Log learning rate to Comet.ml
         for param_group in optimizer.param_groups:
             lr = param_group['lr']
-            experiment.log_metric("lllearning_rate", lr, epoch=epoch_number + 1)
+            experiment.log_metric("learning_rate", lr, epoch=epoch_number + 1)
             break  # Assuming all param_groups have the same learning rate
 
         # Adjust learning rate based on validation loss
