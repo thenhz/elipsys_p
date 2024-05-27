@@ -84,6 +84,9 @@ timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 writer = SummaryWriter('tensorboard/eLipSys_trainer_{}'.format(timestamp))
 model = NHz6(args).to(device)
 
+if args['gpus'] > 1:
+    model = nn.DataParallel(model)  # Wrap the model with DataParallel
+
 lr = args['batch'] / 32.0 / torch.cuda.device_count() * args['lr']
 optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay=1e-4)  
 loss_fn = nn.CTCLoss(blank=0, zero_infinity=True) # 0 is conventionally used for blank class in CTC
