@@ -24,12 +24,12 @@ class Trainer:
         model: torch.nn.Module,
         train_data: DataLoader,
         optimizer: torch.optim.Optimizer,
-        gpu_id: int,
+        device: int,
         save_every: int, 
         experiment
     ) -> None:
-        self.gpu_id = gpu_id
-        self.model = model.to(gpu_id)
+        self.device = device
+        self.model = model.to(device)
         self.train_data = train_data
         self.optimizer = optimizer
         self.save_every = save_every
@@ -53,15 +53,15 @@ class Trainer:
     def _run_epoch(self, epoch):
         self.running_loss = 0.0
         self.model.train(True)
-        print(f"[GPU{self.gpu_id}] Epoch {epoch} | Steps: {len(self.train_data)}")
+        print(f"[Device {self.device}] Epoch {epoch} | Total steps: {len(self.train_data)}")
         #for source, targets in self.train_data:
         for i, data in enumerate(self.train_data):
-            step_num = (epoch+1)*i
+            step_num = (epoch+1)*(i+1)
             # Get inputs and labels
-            inputs = data['video'].to(self.gpu_id)
-            input_len = data['input_len'].to(self.gpu_id)
-            labels = data['label'].to(self.gpu_id)
-            label_lengths = data['output_len'].to(self.gpu_id)
+            inputs = data['video'].to(self.device)
+            input_len = data['input_len'].to(self.device)
+            labels = data['label'].to(self.device)
+            label_lengths = data['output_len'].to(self.device)
             batch_loss = self._run_batch(inputs, input_len, labels, label_lengths)
             #last_loss = self.running_loss / (i + 1)  # average loss per batch
             self.experiment.log_metric("batch_loss", batch_loss, step=step_num)
@@ -123,5 +123,5 @@ if __name__ == "__main__":
         auto_histogram_activation_logging=True,
         auto_metric_step_rate=1
         )
-    device = 0  # shorthand for cuda:0
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     main(device, experiment, args)

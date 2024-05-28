@@ -31,10 +31,10 @@ class NHz7(nn.Module):
 
         # Recurrent layers
         #self.rnn = nn.LSTM(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        self.rnn = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.2)
+        self.rnn = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.2, bidirectional=True)
 
         # Classification layer
-        self.fc = nn.Linear(hidden_size, vocab_size)
+        self.fc = nn.Linear(hidden_size*2, vocab_size)
 
     def forward(self, x, input_len):
         """
