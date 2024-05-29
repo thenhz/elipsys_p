@@ -16,7 +16,23 @@ import os
 from datasets.dummy_dataset import DummyDataset
 from models.NHz7 import NHz7
 from torch.cuda.amp import GradScaler, autocast
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
+import os
 
+
+def ddp_setup(rank, world_size):
+    """
+    Args:
+        rank: Unique identifier of each process
+        world_size: Total number of processes
+    """
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
 
 class Trainer:
     def __init__(
@@ -33,6 +49,7 @@ class Trainer:
     ) -> None:
         self.device = device
         self.model = model.to(device)
+        self.model = DDP(model, device_ids=[device])
         self.train_data = train_data
         self.valid_data = valid_data
         self.optimizer = optimizer
@@ -64,6 +81,7 @@ class Trainer:
         self.model.train(True)
         batch_size = len(self.train_data)
         print(f"[Device {self.device}] Epoch {epoch} | Total steps: {batch_size}")
+        self.train_data.sampler.set_epoch(epoch)
         #for source, targets in self.train_data:
         for i, data in enumerate(self.train_data):
             step_num = (epoch*batch_size) + (i+1)
@@ -101,12 +119,12 @@ class Trainer:
                 # Log the predictions to Comet.ml
                 for j, decoded in enumerate(decoded_predictions):
                     # Log the predicted and true values
-                    experiment.log_text(
+                    self.experiment.log_text(
                         decoded, 
                         step=step_num, 
                         metadata={"type": "prediction", "batch": i, "item": j}
                         )
-                    experiment.log_text(
+                    self.experiment.log_text(
                         decoded_truth[j], 
                         step=step_num, 
                         metadata={"type": "truth", "batch": i, "item": j}
@@ -118,7 +136,7 @@ class Trainer:
                 
 
     def _save_checkpoint(self, epoch):
-        ckp = self.model.state_dict()
+        ckp = self.model.module.state_dict()
         model_path = 'elipsys_best'
         model_path = os.path.join(args['save_prefix'], model_path)
         torch.save(ckp, model_path)
@@ -132,7 +150,7 @@ class Trainer:
             with self.experiment.validate():
                 vloss = self._validate(epoch)
             self.scheduler.step(vloss)
-            if vloss < self.best_vloss:
+            if vloss < self.best_vloss and self.device == 0:
                 self._save_checkpoint(epoch)
 
 
@@ -140,7 +158,7 @@ def load_train_objs(args):
     char_to_num, num_to_char = word_to_number_mapping()
     train_set = DummyDataset(args, "train", char_to_num) 
     valid_set = DummyDataset(args, "val", char_to_num) # load your dataset
-    model = model = NHz7(args['vocab_size'], hidden_size=1024, num_layers=3, pretrained_model=args['model_name']).to(device) # load your model
+    model = model = NHz7(args['vocab_size'], hidden_size=1024, num_layers=3, pretrained_model=args['model_name'])
     lr = args['batch'] / 32.0 / torch.cuda.device_count() * args['lr']
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.5)
@@ -153,7 +171,8 @@ def prepare_dataloader(dataset: Dataset, args, shuffle=True):
         batch_size=args['batch'],
         pin_memory=True,
         shuffle=shuffle,
-        num_workers=args['num_workers']
+        num_workers=args['num_workers'],
+        sampler=DistributedSampler(dataset)
     )
 
 def word_to_number_mapping():
@@ -216,12 +235,24 @@ def greedy_ctc_decode(output, input_lengths, num_to_char):
     return decoded_batch
 
 
-def main(device, experiment, args):
+def main(device, args, world_size):
+    ddp_setup(device, world_size)
+    if device == 0:
+        experiment = Experiment(
+            api_key=os.getenv("EXPERIMENT_API_KEY"),
+            project_name="eLipSys_NHz7",
+            auto_histogram_weight_logging=True,
+            auto_histogram_gradient_logging=True,
+            auto_histogram_activation_logging=True,
+            auto_metric_step_rate=1
+            )
+    else:
+        experiment = Experiment(disabled=True)
     experiment.log_parameters(args)
     total_epochs = args['max_epoch']
     save_every = args['save_every']
     train_ds, valid_ds,model, optimizer, scheduler, num_to_char = load_train_objs(args)
-    train_data = prepare_dataloader(train_ds, args, shuffle=True)
+    train_data = prepare_dataloader(train_ds, args, shuffle=False)
     valid_data = prepare_dataloader(valid_ds, args, shuffle=False)
     trainer = Trainer(
         model, 
@@ -241,13 +272,6 @@ def main(device, experiment, args):
 if __name__ == "__main__":
     with open('config.yaml', 'r') as file:
         args = yaml.safe_load(file)
-    experiment = Experiment(
-        api_key=os.getenv("EXPERIMENT_API_KEY"),
-        project_name="eLipSys_NHz7",
-        auto_histogram_weight_logging=True,
-        auto_histogram_gradient_logging=True,
-        auto_histogram_activation_logging=True,
-        auto_metric_step_rate=1
-        )
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    main(device, experiment, args)
+    
+    world_size = torch.cuda.device_count()
+    mp.spawn(main, args=(args, world_size), nprocs=world_size)
