@@ -5,7 +5,7 @@ import torch.nn as nn
 import torchvision.models as models
 
 class NHz7(nn.Module):
-    def __init__(self, vocab_size, hidden_size=512, num_layers=1, pretrained_model='resnet18'):
+    def __init__(self, vocab_size, hidden_size=1024, num_layers=3, pretrained_model='resnet18'):
         """
         Initializes the model.
 
@@ -30,10 +30,11 @@ class NHz7(nn.Module):
             raise NotImplementedError(f'{pretrained_model} is not implemented. Please use resnet18 or efficientnet_v2 for now.')
 
         # Recurrent layers
-        self.rnn = nn.LSTM(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        #self.rnn = nn.LSTM(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        self.rnn = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.2, bidirectional=True)
 
         # Classification layer
-        self.fc = nn.Linear(hidden_size, vocab_size)
+        self.fc = nn.Linear(hidden_size*2, vocab_size)
 
     def forward(self, x, input_len):
         """

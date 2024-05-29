@@ -18,7 +18,7 @@ from torch.cuda.amp import GradScaler, autocast
 with open('config.yaml', 'r') as file:
     args = yaml.safe_load(file)
 
-def train_one_epoch(epoch_index, experiment):
+def train_one_epoch(epoch_number, experiment):
     running_loss = 0.0
     for i, data in enumerate(training_loader):
         # Get inputs and labels
@@ -44,16 +44,15 @@ def train_one_epoch(epoch_index, experiment):
         running_loss += loss.item()
         last_loss = running_loss / (i + 1)  # average loss per batch
         print('  batch {} loss: {}'.format(i + 1, last_loss))
-        tb_x = epoch_index * len(training_loader) + i + 1
         # Log loss to Comet.ml
-        experiment.log_metric("batch_loss", last_loss, step=tb_x)
+        experiment.log_metric("batch_loss", last_loss, step=epoch_number)
 
     return last_loss
 
 def get_data_loaders(args):
     #TODO: si può fare con un solo argomento
-    train_ds = DummyDataset(args, "train")
-    val_ds = DummyDataset(args, "val")
+    train_ds = DummyDataset(args, "train", None)
+    val_ds = DummyDataset(args, "val", None)
     training_loader = DataLoader(
                 train_ds,
                 batch_size=args['batch'],
@@ -125,9 +124,10 @@ scaler = GradScaler()
 experiment = Experiment(
     api_key=os.getenv("EXPERIMENT_API_KEY"),
     project_name="eLipSys_NHz7",
-    #auto_histogram_weight_logging=True,
-    #auto_histogram_gradient_logging=True,
-    #auto_histogram_activation_logging=True
+    auto_histogram_weight_logging=True,
+    auto_histogram_gradient_logging=True,
+    auto_histogram_activation_logging=True,
+    auto_metric_step_rate=1
     )
 
 
@@ -161,10 +161,10 @@ best_vloss = 1_000_000.
 
 # Watch the model with Comet.ml
 with experiment.train():
-    watch(model)
+    watch(model, log_step_interval=10)
 
     for epoch in range(EPOCHS):
-        print('EPOCH {}:'.format(epoch_number + 1))
+        print('EPOCH {}:'.format(epoch_number))
 
         model.train(True)
         avg_loss = train_one_epoch(epoch_number, experiment)
@@ -193,8 +193,17 @@ with experiment.train():
                 # Log the predictions to Comet.ml
                 for j, decoded in enumerate(decoded_predictions):
                     # Log the predicted and true values
-                    experiment.log_text(decoded, step=epoch * len(validation_loader) + i, metadata={"type": "prediction", "batch": i, "item": j})
-                    experiment.log_text(decoded_truth[j], step=epoch * len(validation_loader) + i, metadata={"type": "truth", "batch": i, "item": j})
+                    experiment.log_text(
+                        decoded, 
+                        step=epoch_number, 
+                        metadata={"type": "prediction", "batch": i, "item": j}
+                        )
+                    experiment.log_text(
+                        decoded_truth[j], 
+                        step=epoch_number, 
+                        metadata={"type": "truth", "batch": i, "item": j}
+                        )
+                    print(f"Epoch {epoch}, Item {j}:\nPrediction: {decoded}\nTruth: {decoded_truth[j]}")
                     if j == 2:
                         break
 
@@ -202,23 +211,13 @@ with experiment.train():
         print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
 
         # Log training and validation loss to Comet.ml
-        experiment.log_metric("train_loss", avg_loss, epoch=epoch_number + 1)
-        experiment.log_metric("valid_loss", avg_vloss, epoch=epoch_number + 1)
-
-        # Get gradients
-        gradients = {}
-        for name, param in model.named_parameters():
-            if "feature_extractor" not in name:
-                if param.grad is not None:
-                    gradients[name] = param.grad.detach()
-
-        for name, gradient in gradients.items():
-            experiment.log_histogram_3d(gradient.cpu().numpy(), name=f"gggradient_{name}", step=epoch_number + 1)
+        experiment.log_metric("train_loss", avg_loss, epoch=epoch_number)
+        experiment.log_metric("valid_loss", avg_vloss, epoch=epoch_number)
 
         # Log learning rate to Comet.ml
         for param_group in optimizer.param_groups:
             lr = param_group['lr']
-            experiment.log_metric("lllearning_rate", lr, epoch=epoch_number + 1)
+            experiment.log_metric("learning_rate", lr, epoch=epoch_number)
             break  # Assuming all param_groups have the same learning rate
 
         # Adjust learning rate based on validation loss

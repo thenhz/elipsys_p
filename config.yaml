@@ -1,13 +1,13 @@
 #hardware params
 gpus : 1
-num_workers : 4
+num_workers : 2
 
 #network params
 model_name: 'resnet18'
 #video_resize_format: [128,128] #blazenet
 video_resize_format: [224,224] #resnet18
 
-vocab_size: 40
+vocab_size: 39
 batch: 4
 n_dimention : 500
 
@@ -15,6 +15,7 @@ n_dimention : 500
 lr : 0.00002
 max_epoch : 100
 save_prefix : "checkpoint"
+save_every : 32
 short_train : False
 
 #loader params
