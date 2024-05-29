@@ -7,7 +7,7 @@ model_name: 'resnet18'
 #video_resize_format: [128,128] #blazenet
 video_resize_format: [224,224] #resnet18
 
-vocab_size: 40
+vocab_size: 39
 batch: 4
 n_dimention : 500
 

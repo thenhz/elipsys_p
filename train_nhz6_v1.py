@@ -51,8 +51,8 @@ def train_one_epoch(epoch_number, experiment):
 
 def get_data_loaders(args):
     #TODO: si può fare con un solo argomento
-    train_ds = DummyDataset(args, "train")
-    val_ds = DummyDataset(args, "val")
+    train_ds = DummyDataset(args, "train", None)
+    val_ds = DummyDataset(args, "val", None)
     training_loader = DataLoader(
                 train_ds,
                 batch_size=args['batch'],

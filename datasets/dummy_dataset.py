@@ -29,7 +29,7 @@ class ConsistentRandomPerspective:
 
 class DummyDataset(Dataset):
 
-    def __init__(self, args, phases):
+    def __init__(self, args, phases, char_to_num):
         self.video_dir = args['video_dir']
         self.label_dir = args['label_dir']
         self.phases = phases
@@ -37,7 +37,7 @@ class DummyDataset(Dataset):
         self.video_resize_format = args['video_resize_format']
         self.max_frames_per_video = args['max_frames_per_video']
         self.color_jitter = torchvision.transforms.ColorJitter(0.3, 0.3, 0.3)
-
+        self.char_to_num = char_to_num
         self.video_files = []
         self.label_files = []
 
@@ -55,7 +55,8 @@ class DummyDataset(Dataset):
         self.label_files = [os.path.join(self.label_dir, label_file) for label_file in self.label_files]
         # Create a mapping from words to numbers
         vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
-        self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
+        if char_to_num is None:
+            self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
         #self.mouth_cropper = MouthCropper()
 
     def __getitem__(self, idx):
