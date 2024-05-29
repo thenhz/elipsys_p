@@ -21,6 +21,33 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os
+import logging
+
+def setup_logging(rank):
+    logger = logging.getLogger(f'Process_{rank}')
+    logger.setLevel(logging.INFO)
+
+    # Create console handler and set level to info
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter(f'%(asctime)s [%(levelname)s] [Process {rank}] %(message)s',  
+                                  datefmt='%Y-%m-%d %H:%M:%S')
+
+    # Add formatter to console handler
+    console_handler.setFormatter(formatter)
+
+    # Add console handler to logger
+    logger.addHandler(console_handler)
+
+    # Optionally, add a file handler as well
+    file_handler = logging.FileHandler(f'./logs/process_{rank}.logs')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    return logger
 
 
 def ddp_setup(rank, world_size):
@@ -45,7 +72,8 @@ class Trainer:
         save_every: int, 
         experiment, 
         num_to_char,
-        scheduler
+        scheduler,
+        logger
     ) -> None:
         self.device = device
         self.model = model.to(device)
@@ -61,6 +89,7 @@ class Trainer:
         self.num_to_char = num_to_char
         self.scheduler = scheduler
         self.best_vloss = 1_000_000.
+        self.logger = logger
 
     def _run_batch(self, inputs, input_len, labels, label_lengths, train=True):
         if train:
@@ -80,7 +109,7 @@ class Trainer:
         self.running_loss = 0.0
         self.model.train(True)
         batch_size = len(self.train_data)
-        print(f"[Device {self.device}] Epoch {epoch} | Total steps: {batch_size}")
+        self.logger.info(f"[Device {self.device}] Epoch {epoch} | Total steps: {batch_size}")
         self.train_data.sampler.set_epoch(epoch)
         #for source, targets in self.train_data:
         for i, data in enumerate(self.train_data):
@@ -94,7 +123,7 @@ class Trainer:
             self.running_loss += batch_loss
             #last_loss = self.running_loss / (i + 1)  # average loss per batch
             self.experiment.log_metric("loss", batch_loss, step=step_num)
-            print(f"    Train batch {i}, step {step_num}, loss {batch_loss}")
+            self.logger.info(f"    Train batch {i}, step {step_num}, loss {batch_loss}")
 
     def _validate(self, epoch):
         vloss = 0
@@ -112,7 +141,7 @@ class Trainer:
                 loss, output = self._run_batch(inputs, input_len, labels, label_lengths, train=False)
                 self.experiment.log_metric("loss", loss, step=step_num)
                 vloss += loss
-                print(f"    Valid batch {i}, step {i+1}, loss {loss}")
+                self.logger.info(f"    Valid batch {i}, step {i+1}, loss {loss}")
                 decoded_truth = decode_predictions(torch.permute(labels.cpu(), (1, 0)), self.num_to_char)
                 decoded_predictions = greedy_ctc_decode(output, input_len, self.num_to_char)
 
@@ -129,7 +158,7 @@ class Trainer:
                         step=step_num, 
                         metadata={"type": "truth", "batch": i, "item": j}
                         )
-                    print(f"Epoch {epoch}, Item {j}:\nPrediction: {decoded}\nTruth: {decoded_truth[j]}")
+                    self.logger.info(f"Epoch {epoch}, Item {j}:\nPrediction: {decoded}\nTruth: {decoded_truth[j]}")
                     if j == 1:
                         break
             return vloss / steps
@@ -138,9 +167,9 @@ class Trainer:
     def _save_checkpoint(self, epoch):
         ckp = self.model.module.state_dict()
         model_path = 'elipsys_best'
-        model_path = os.path.join(args['save_prefix'], model_path)
+        model_path = os.path.join("checkpoint", model_path)
         torch.save(ckp, model_path)
-        print(f"Epoch {epoch} | Training checkpoint saved at {model_path}")
+        self.logger.info(f"Epoch {epoch} | Training checkpoint saved at {model_path}")
 
     def train(self, max_epochs: int):        
         watch(self.model, log_step_interval=10)
@@ -237,9 +266,10 @@ def greedy_ctc_decode(output, input_lengths, num_to_char):
 
 def main(device, args, world_size):
     ddp_setup(device, world_size)
+    logger = setup_logging(device)
     if device == 0:
         experiment = Experiment(
-            api_key=os.getenv("EXPERIMENT_API_KEY"),
+            api_key="8hE5H33Hi2gJSQMZF29RcRB3M",
             project_name="eLipSys_NHz7",
             auto_histogram_weight_logging=True,
             auto_histogram_gradient_logging=True,
@@ -263,7 +293,8 @@ def main(device, args, world_size):
         save_every, 
         experiment,
         num_to_char,
-        scheduler
+        scheduler,
+        logger
     )
     trainer.train(total_epochs)
     log_model(experiment, model, "eLipSys_model")
