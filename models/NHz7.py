@@ -3,6 +3,7 @@ import torch
 import torch
 import torch.nn as nn
 import torchvision.models as models
+import torch.nn.init as init
 
 class NHz7(nn.Module):
     def __init__(self, vocab_size, hidden_size=1024, num_layers=3, pretrained_model='resnet18'):
@@ -29,12 +30,16 @@ class NHz7(nn.Module):
         else:
             raise NotImplementedError(f'{pretrained_model} is not implemented. Please use resnet18 or efficientnet_v2 for now.')
 
-        # Recurrent layers
-        #self.rnn = nn.LSTM(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-        self.rnn = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=0.2, bidirectional=True)
+        # First Recurrent layer
+        self.rnn1 = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
+
+        # Second Recurrent layer
+        self.rnn2 = nn.GRU(input_size=hidden_size*2, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
 
         # Classification layer
         self.fc = nn.Linear(hidden_size*2, vocab_size)
+
+        self.init_weights()
 
     def forward(self, x, input_len):
         """
@@ -57,13 +62,39 @@ class NHz7(nn.Module):
 
         features = torch.stack(features, dim=1)  # Shape: (batch_size, num_frames, feature_dim)
 
-        # Process the sequence of features with the RNN
-        rnn_out, _ = self.rnn(features)  # rnn_out shape: (batch_size, num_frames, hidden_size)
+        # Process the sequence of features with the first LSTM
+        rnn_out1, _ = self.rnn1(features)  # rnn_out1 shape: (batch_size, num_frames, hidden_size)
+
+        # Process the output of the first LSTM with the second LSTM
+        rnn_out2, _ = self.rnn2(rnn_out1)  # rnn_out2 shape: (batch_size, num_frames, hidden_size)
 
         # Classification for each timestep
-        out = self.fc(rnn_out)  # Shape: (batch_size, num_frames, vocab_size)
+        out = self.fc(rnn_out2)  # Shape: (batch_size, num_frames, vocab_size)
 
         return out
+    
+    def init_weights(self):
+        # Initialize LSTM weights for both LSTMs
+        for name, param in self.rnn1.named_parameters():
+            if 'weight_ih' in name:
+                init.xavier_uniform_(param.data)
+            elif 'weight_hh' in name:
+                init.orthogonal_(param.data)
+            elif 'bias' in name:
+                param.data.fill_(0)
+
+        for name, param in self.rnn2.named_parameters():
+            if 'weight_ih' in name:
+                init.xavier_uniform_(param.data)
+            elif 'weight_hh' in name:
+                init.orthogonal_(param.data)
+            elif 'bias' in name:
+                param.data.fill_(0)
+
+        # Initialize Fully Connected Layer
+        init.xavier_uniform_(self.fc.weight)
+        if self.fc.bias is not None:
+            self.fc.bias.data.fill_(0)
 
 # Example usage:
 if __name__ == '__main__':

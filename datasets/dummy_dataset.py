@@ -65,7 +65,7 @@ class DummyDataset(Dataset):
 
         result = {}
         result['video'], result['input_len'] = self.load_video(video_file)
-        result['label'], result['output_len']  = self.extract_label(label_file) 
+        result['label'], result['output_len']  = self.extract_label(label_file, self.args['vocab_size']) 
 
         return result
 
@@ -87,7 +87,7 @@ class DummyDataset(Dataset):
         video = video.float() / 255.0
         augment_transform = torchvision.transforms.Compose([])
 
-        if self.args['model_name'] == 'resnet18':
+        if self.args['model_name'] == 'resnet18' or self.args['model_name'] == 'efficientnet_v2':
             resize_transform = torchvision.transforms.Compose([
                 torchvision.transforms.Resize(256),                               # Resize to a slightly larger size
                 torchvision.transforms.CenterCrop(self.video_resize_format[1]),   # Crop the center 224x224 pixels
@@ -95,14 +95,15 @@ class DummyDataset(Dataset):
                                                  std=[0.229, 0.224, 0.225])      # Normalize with ImageNet std
             ])
             
-            # Add augmentation if in training phase
-            if self.phases == 'train':
-                flip_transform = torchvision.transforms.RandomHorizontalFlip(p=0.5)  # 50% chance to flip
-                distort_transform = torchvision.transforms.RandomApply([ConsistentRandomPerspective(distortion_scale=0.4)], p=0.5)  # Apply distortion with a probability of 50%
-                augment_transform = torchvision.transforms.Compose([
-                    flip_transform,
-                    distort_transform
-                ])
+        # Add augmentation if in training phase
+        if self.phases == 'train':
+            flip_transform = torchvision.transforms.RandomHorizontalFlip(p=0.5)  # 50% chance to flip
+            distort_transform = torchvision.transforms.RandomApply([ConsistentRandomPerspective(distortion_scale=0.4)], p=0.5)  # Apply distortion with a probability of 50%
+            augment_transform = torchvision.transforms.Compose([
+                flip_transform,
+                distort_transform
+            ])
+        #TODO: forse si può ottimizzare questo loop e quello dopo????
         # Apply the resize transform first to each frame in the video
         video = torch.stack([resize_transform(frame) for frame in video])
         
@@ -113,11 +114,11 @@ class DummyDataset(Dataset):
         # Count the real number of loaded frames
         num_frames = video.shape[0]
         # Pad with zeros or slice the video frames to match self.args.max_frames
-        if num_frames < self.max_frames_per_video:
+        """ if num_frames < self.max_frames_per_video:
             padding = torch.zeros((self.max_frames_per_video - num_frames, video.shape[1], video.shape[2], video.shape[3]))
             video = torch.cat((video, padding), dim=0)
         else:
-            video = video[:self.max_frames_per_video]
+            video = video[:self.max_frames_per_video] """
         #self.save_video(video, "video.mp4")
         return video, torch.tensor(num_frames)
 
@@ -149,14 +150,14 @@ class DummyDataset(Dataset):
         label_len = len(numerical_representation)
         numerical_representation = torch.tensor(numerical_representation)
 
-        if label_len < max_labels_length:
+        """ if label_len < max_labels_length:
             labels_padding = torch.zeros((max_labels_length - label_len))
             #breaks here
             padded_labels = torch.cat((numerical_representation, labels_padding), dim=0)
         else:
-            padded_labels = numerical_representation[:max_labels_length]
+            padded_labels = numerical_representation[:max_labels_length] """
 
-        return padded_labels, torch.tensor(label_len)
+        return numerical_representation, torch.tensor(label_len)
 
     def __len__(self):
         return len(self.video_files)

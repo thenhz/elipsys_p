@@ -22,6 +22,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import os
 import logging
+from torch.nn.utils.rnn import pad_sequence
 
 def setup_logging(rank):
     logger = logging.getLogger(f'Process_{rank}')
@@ -84,7 +85,7 @@ class Trainer:
         self.save_every = save_every
         self.experiment = experiment
         self.scaler = GradScaler()
-        self.loss_fn = nn.CTCLoss(blank=0, zero_infinity=True)  # 0 is conventionally used for blank class in CTC
+        self.loss_fn = nn.CTCLoss(blank=0, zero_infinity=False)  # 0 is conventionally used for blank class in CTC
         self.running_loss = 0.0
         self.num_to_char = num_to_char
         self.scheduler = scheduler
@@ -118,12 +119,17 @@ class Trainer:
             inputs = data['video'].to(self.device)
             input_len = data['input_len'].to(self.device)
             labels = data['label'].to(self.device)
-            label_lengths = data['output_len'].to(self.device)
+            label_lengths = data['output_len'].to(self.device)    
             batch_loss, output = self._run_batch(inputs, input_len, labels, label_lengths)
             self.running_loss += batch_loss
             #last_loss = self.running_loss / (i + 1)  # average loss per batch
             self.experiment.log_metric("loss", batch_loss, step=step_num)
             self.logger.info(f"    Train batch {i}, step {step_num}, loss {batch_loss}")
+        # Log learning rate to Comet.ml
+        for param_group in self.optimizer.param_groups:
+            lr = param_group['lr']
+            self.experiment.log_metric("learning_rate", lr, epoch=epoch)
+            break  # Assuming all param_groups have the same learning rate
 
     def _validate(self, epoch):
         vloss = 0
@@ -142,7 +148,9 @@ class Trainer:
                 self.experiment.log_metric("loss", loss, step=step_num)
                 vloss += loss
                 self.logger.info(f"    Valid batch {i}, step {i+1}, loss {loss}")
-                decoded_truth = decode_predictions(torch.permute(labels.cpu(), (1, 0)), self.num_to_char)
+                # Split the labels according to label_lengths
+                split_labels = torch.split(labels, label_lengths.tolist())
+                decoded_truth = decode_predictions(split_labels, self.num_to_char)
                 decoded_predictions = greedy_ctc_decode(output, input_len, self.num_to_char)
 
                 # Log the predictions to Comet.ml
@@ -201,16 +209,16 @@ def prepare_dataloader(dataset: Dataset, args, shuffle=True):
         pin_memory=True,
         shuffle=shuffle,
         num_workers=args['num_workers'],
-        sampler=DistributedSampler(dataset)
+        sampler=DistributedSampler(dataset),
+        collate_fn=custom_collate_fn
     )
 
 def word_to_number_mapping():
-    vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
-    char_to_num = {}
-    num_to_char = {}
-    for i, char in enumerate(vocab):
-        char_to_num[char] = i
-        num_to_char[i] = char
+    # Using ASCII values to ensure uniform character mapping and avoiding conflicts
+    vocab = "abcdefghijklmnopqrstuvwxyz "
+    char_to_num = {char: idx+1 for idx, char in enumerate(vocab)}
+    char_to_num['blank'] = 0  # Explicitly assigning blank token to 0
+    num_to_char = {idx: char for char, idx in char_to_num.items()}
     return char_to_num, num_to_char
 
 def decode_predictions(preds, num_to_char):
@@ -225,9 +233,9 @@ def decode_predictions(preds, num_to_char):
     - decoded (list of str): decoded label strings
     """
     decoded_batch = []
-    for i in range(preds.shape[1]):
+    for i in range(len(preds)):
         decoded = []
-        for p in preds[:,i]:
+        for p in preds[i].cpu():
             if int(p) in num_to_char:
                 decoded.append(num_to_char[int(p)])
         decoded_batch.append(''.join(decoded))
@@ -253,7 +261,6 @@ def greedy_ctc_decode(output, input_lengths, num_to_char):
         chars = [num_to_char[idx.item()] for idx in max_indices]
         decoded = []
         previous_char = None
-        #TODO: perchè il num_to_char[0] è "a"? ho capito che facciamo padding così ma la "a" come la mappiamo?inoltre non docrei appendere 
         for char in chars:
             if char != previous_char and char != num_to_char[0]:  # skip blanks (conventionally mapped to 0)
                 decoded.append(char)
@@ -263,6 +270,24 @@ def greedy_ctc_decode(output, input_lengths, num_to_char):
 
     return decoded_batch
 
+def custom_collate_fn(batch):
+    inputs = [item['video'] for item in batch]
+    labels = [item['label'] for item in batch]
+    
+    # We will pad inputs to the maximum length in the batch
+    input_lengths = torch.tensor([len(input) for input in inputs])
+    padded_inputs = pad_sequence(inputs, batch_first=True, padding_value=0)  # or whatever your padding value is
+    
+    # Concatenate all labels together (no padding required for labels)
+    concatenated_labels = torch.cat(labels)
+    # Record the lengths of each label
+    label_lengths = torch.tensor([len(label) for label in labels])
+    return {
+        'video': padded_inputs,
+        'label': concatenated_labels,
+        'input_len': input_lengths,
+        'output_len': label_lengths
+    }
 
 def main(device, args, world_size):
     ddp_setup(device, world_size)
@@ -274,10 +299,11 @@ def main(device, args, world_size):
             auto_histogram_weight_logging=True,
             auto_histogram_gradient_logging=True,
             auto_histogram_activation_logging=True,
-            auto_metric_step_rate=1
+            auto_metric_step_rate=10
             )
     else:
         experiment = Experiment(disabled=True)
+
     experiment.log_parameters(args)
     total_epochs = args['max_epoch']
     save_every = args['save_every']
@@ -305,4 +331,7 @@ if __name__ == "__main__":
         args = yaml.safe_load(file)
     
     world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(args, world_size), nprocs=world_size)
+    if world_size == 1:
+        main(0,args,world_size)
+    else:
+        mp.spawn(main, args=(args, world_size), nprocs=world_size)
