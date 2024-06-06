@@ -68,7 +68,9 @@ class BlazeFaceLandmark(BlazeLandmark):
         x = F.pad(x, (0, 1, 0, 1), "constant", 0)
 
         x = self.backbone1(x)
-        landmarks = self.backbone2a(x).view(-1, 468, 3) / 192
+        #landmarks = self.backbone2a(x).view(-1, 468, 3) / 192
+        #TODO: potremmo provare ad estrarre solamente i landmark della bocca?
+        landmarks = self.backbone2a(x) / 192
         flag = self.backbone2b(x).sigmoid().view(-1)
 
-        return flag, landmarks
+        return flag, landmarks.squeeze()

@@ -45,15 +45,15 @@ back_detector = True
 face_detector = BlazeFace(back_model=back_detector).to(gpu)
 
 if back_detector:
-    face_detector.load_weights("models/facelandmark/mediapipe/blazefaceback.pth")
-    face_detector.load_anchors("models/facelandmark/mediapipe/anchors_face_back.npy")
+    face_detector.load_weights("/code/elipsys_p/datasets/facelandmark/mediapipe/blazefaceback.pth")
+    face_detector.load_anchors("/code/elipsys_p/datasets/facelandmark/mediapipe/anchors_face_back.npy")
 else:
-    face_detector.load_weights("models/facelandmark/mediapipe/blazeface.pth")
-    face_detector.load_anchors("models/facelandmark/mediapipe/anchors_face.npy")
+    face_detector.load_weights("/code/elipsys_p/datasets/facelandmark/mediapipe/blazeface.pth")
+    face_detector.load_anchors("/code/elipsys_p/datasets/facelandmark/mediapipe/anchors_face.npy")
 
 
 face_regressor = BlazeFaceLandmark().to(gpu)
-face_regressor.load_weights("models/facelandmark/mediapipe/blazeface_landmark.pth")
+face_regressor.load_weights("/code/elipsys_p/datasets/facelandmark/mediapipe/blazeface_landmark.pth")
 
 
 video_file_path = "/code/datasets/eLipSys/data/s1/bras6n.mpg"
@@ -71,20 +71,20 @@ while hasFrame:
 
     frame = np.ascontiguousarray(frame[:,:,::-1])
 
-    img1, img2, scale, pad = resize_pad(frame)
+    img1, img2, scale, pad = resize_pad(frame) #img2 (128,128,3)
 
     if back_detector:
-        normalized_face_detections = face_detector.predict_on_image(img1)
+        normalized_face_detections = face_detector.predict_on_image(img1) # cuda [1,17]
     else:
         normalized_face_detections = face_detector.predict_on_image(img2)
 
-    face_detections = denormalize_detections(normalized_face_detections, scale, pad)
+    face_detections = denormalize_detections(normalized_face_detections, scale, pad) #cuda [1,17]
 
 
     xc, yc, scale, theta = face_detector.detection2roi(face_detections.cpu())
-    img, affine, box = face_regressor.extract_roi(frame, xc, yc, theta, scale)
-    flags, normalized_landmarks = face_regressor(img.to(gpu))
-    landmarks = face_regressor.denormalize_landmarks(normalized_landmarks.cpu(), affine)
+    img, affine, box = face_regressor.extract_roi(frame, xc, yc, theta, scale) # img CPU (1,3,192,192)
+    flags, normalized_landmarks = face_regressor(img.to(gpu)) # normalized_landmarks CUDA (1,1404,1,1)
+    landmarks = face_regressor.denormalize_landmarks(normalized_landmarks.cpu(), affine) 
 
     cropped_img = get_mouth_region(frame,landmarks, flags)
 

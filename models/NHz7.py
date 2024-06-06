@@ -5,8 +5,10 @@ import torch.nn as nn
 import torchvision.models as models
 import torch.nn.init as init
 
+from datasets.facelandmark.mediapipe.blazeface_landmark import BlazeFaceLandmark
+
 class NHz7(nn.Module):
-    def __init__(self, vocab_size, hidden_size=1024, num_layers=3, pretrained_model='resnet18'):
+    def __init__(self, vocab_size, hidden_size=1024, num_layers=3, feature_dim=1404):
         """
         Initializes the model.
 
@@ -17,18 +19,6 @@ class NHz7(nn.Module):
         - pretrained_model (str): The name of the pretrained model to use for feature extraction.
         """
         super(NHz7, self).__init__()
-
-        # Pretrained feature extractor
-        if pretrained_model == 'resnet18':
-            self.feature_extractor = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-            self.feature_extractor.fc = nn.Identity()  # Remove the last fully connected layer
-            feature_dim = 512  # Dimension of the output features from ResNet
-        elif pretrained_model == 'efficientnet_v2':
-            self.feature_extractor = models.efficientnet_v2_s(pretrained=True)
-            self.feature_extractor.classifier = nn.Identity()  # Remove the last fully connected layer
-            feature_dim = 1280  # Dimension of the output features from EfficientNet V2
-        else:
-            raise NotImplementedError(f'{pretrained_model} is not implemented. Please use resnet18 or efficientnet_v2 for now.')
 
         # First Recurrent layer
         self.rnn1 = nn.GRU(input_size=feature_dim, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True, dropout=0.5)
@@ -51,19 +41,19 @@ class NHz7(nn.Module):
         Returns:
         - out (torch.Tensor): Output tensor of shape (batch_size, num_frames, vocab_size).
         """
-        batch_size, num_frames, channels, height, width = x.shape
+        """ batch_size, num_frames, channels, height, width = x.shape
 
         # Extract features from each frame
         features = []
         for i in range(num_frames):
             frame = x[:, i, :, :, :]  # Extract the i-th frame
-            frame_features = self.feature_extractor(frame)  # Shape: (batch_size, feature_dim)
+            flags, frame_features = self.feature_extractor(frame)  # Shape: (batch_size, feature_dim)
             features.append(frame_features)
 
-        features = torch.stack(features, dim=1)  # Shape: (batch_size, num_frames, feature_dim)
+        features = torch.stack(features, dim=1)  # Shape: (batch_size, num_frames, feature_dim) """
 
         # Process the sequence of features with the first LSTM
-        rnn_out1, _ = self.rnn1(features)  # rnn_out1 shape: (batch_size, num_frames, hidden_size)
+        rnn_out1, _ = self.rnn1(x)  # rnn_out1 shape: (batch_size, num_frames, hidden_size)
 
         # Process the output of the first LSTM with the second LSTM
         rnn_out2, _ = self.rnn2(rnn_out1)  # rnn_out2 shape: (batch_size, num_frames, hidden_size)

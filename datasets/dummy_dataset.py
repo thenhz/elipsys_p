@@ -11,7 +11,12 @@ from torchvision.io import read_video,write_video
 import torch.nn.functional as F
 from fractions import Fraction
 
+from datasets.facelandmark.mediapipe.blazebase import denormalize_detections, resize_pad
+from datasets.facelandmark.mediapipe.blazeface import BlazeFace
+from datasets.facelandmark.mediapipe.blazeface_landmark import BlazeFaceLandmark
 from datasets.utils.transformers import *
+from datasets.utils.video_utils import extract_roi
+import cv2
 
 
 class ConsistentRandomPerspective:
@@ -29,7 +34,7 @@ class ConsistentRandomPerspective:
 
 class DummyDataset(Dataset):
 
-    def __init__(self, args, phases, char_to_num):
+    def __init__(self, args, phases, char_to_num, device='cuda:0'):
         self.video_dir = args['video_dir']
         self.label_dir = args['label_dir']
         self.phases = phases
@@ -40,6 +45,7 @@ class DummyDataset(Dataset):
         self.char_to_num = char_to_num
         self.video_files = []
         self.label_files = []
+        self.device = device
 
         if self.phases == 'train':
             self.video_files += glob.glob(os.path.join(self.video_dir, '*.mpg'))
@@ -53,11 +59,21 @@ class DummyDataset(Dataset):
         # Create label_files list matching video_files names but with '.align' extension
         self.label_files = [f"{os.path.splitext(os.path.basename(video_file))[0]}.align" for video_file in self.video_files]
         self.label_files = [os.path.join(self.label_dir, label_file) for label_file in self.label_files]
-        # Create a mapping from words to numbers
-        vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
+        
+        #TODO: to deprecate
         if char_to_num is None:
+            # Create a mapping from words to numbers
+            vocab = [x for x in "abcdefghijklmnopqrstuvwxyz'?!123456789 "]
             self.char_to_num, self.num_to_char = self.word_to_number_mapping(vocab)
         #self.mouth_cropper = MouthCropper()
+
+        if self.args['model_name'] == 'blazenet':
+            self.face_detector = BlazeFace(back_model=False)
+            self.face_detector.load_weights("/code/elipsys_p/datasets/facelandmark/mediapipe/blazeface.pth")
+            self.face_detector.load_anchors("/code/elipsys_p/datasets/facelandmark/mediapipe/anchors_face.npy")
+            self.face_regressor = BlazeFaceLandmark()
+            self.face_regressor.load_weights("/code/elipsys_p/datasets/facelandmark/mediapipe/blazeface_landmark.pth")
+
 
     def __getitem__(self, idx):
         video_file = self.video_files[idx]
@@ -84,7 +100,7 @@ class DummyDataset(Dataset):
         # Read the video using torchvision.io.read_video
         video, audio, info = read_video(video_file, output_format='TCHW', pts_unit='sec')
         # Normalize the video frames to be in the range [0, 1]
-        video = video.float() / 255.0
+        #video = video.float() / 255.0
         augment_transform = torchvision.transforms.Compose([])
 
         if self.args['model_name'] == 'resnet18' or self.args['model_name'] == 'efficientnet_v2':
@@ -94,22 +110,38 @@ class DummyDataset(Dataset):
                 torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],      # Normalize with ImageNet mean
                                                  std=[0.229, 0.224, 0.225])      # Normalize with ImageNet std
             ])
-            
-        # Add augmentation if in training phase
+            video = torch.stack([resize_transform(frame) for frame in video])
+        
+        if self.args['model_name'] == 'blazenet':
+            all_features = []
+            for frame in video:
+                frame = frame.cpu().numpy().transpose(1, 2, 0)
+                frame = np.ascontiguousarray(frame[:,:,::-1])
+                img1, img2, scale, pad = resize_pad(frame)
+                normalized_face_detections = self.face_detector.predict_on_image(img2)
+                face_detections = denormalize_detections(normalized_face_detections, scale, pad)
+                xc, yc, scale, theta = self.face_detector.detection2roi(face_detections.cpu())
+                img, affine, box = extract_roi(frame, xc, yc, theta, scale) # img CPU (1,3,192,192)
+                flags, normalized_landmarks = self.face_regressor(img) # normalized_landmarks CUDA (1,1404,1,1)
+                #landmarks = self.face_regressor.denormalize_landmarks(normalized_landmarks.cpu(), affine) 
+
+                all_features.append(normalized_landmarks.detach())
+            video = torch.stack(all_features)
+    
+        """ # Add augmentation if in training phase
         if self.phases == 'train':
             flip_transform = torchvision.transforms.RandomHorizontalFlip(p=0.5)  # 50% chance to flip
             distort_transform = torchvision.transforms.RandomApply([ConsistentRandomPerspective(distortion_scale=0.4)], p=0.5)  # Apply distortion with a probability of 50%
             augment_transform = torchvision.transforms.Compose([
                 flip_transform,
                 distort_transform
-            ])
+            ]) """
         #TODO: forse si può ottimizzare questo loop e quello dopo????
         # Apply the resize transform first to each frame in the video
-        video = torch.stack([resize_transform(frame) for frame in video])
         
         # Apply augmentation transform to each frame in the video if in training phase
-        if self.phases == 'train':
-            video = torch.stack([augment_transform(frame) for frame in video])
+        """ if self.phases == 'train':
+            video = torch.stack([augment_transform(frame) for frame in video]) """
 
         # Count the real number of loaded frames
         num_frames = video.shape[0]

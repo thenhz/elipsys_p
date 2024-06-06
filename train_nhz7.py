@@ -191,11 +191,11 @@ class Trainer:
                 self._save_checkpoint(epoch)
 
 
-def load_train_objs(args):
+def load_train_objs(args, device):
     char_to_num, num_to_char = word_to_number_mapping()
-    train_set = DummyDataset(args, "train", char_to_num) 
-    valid_set = DummyDataset(args, "val", char_to_num) # load your dataset
-    model = model = NHz7(args['vocab_size'], hidden_size=1024, num_layers=3, pretrained_model=args['model_name'])
+    train_set = DummyDataset(args, "train", char_to_num, device=device) 
+    valid_set = DummyDataset(args, "val", char_to_num, device=device) # load your dataset
+    model = model = NHz7(args['vocab_size'], hidden_size=1024, num_layers=3, feature_dim=1404)
     lr = args['batch'] / 32.0 / torch.cuda.device_count() * args['lr']
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.5)
@@ -307,7 +307,7 @@ def main(device, args, world_size):
     experiment.log_parameters(args)
     total_epochs = args['max_epoch']
     save_every = args['save_every']
-    train_ds, valid_ds,model, optimizer, scheduler, num_to_char = load_train_objs(args)
+    train_ds, valid_ds,model, optimizer, scheduler, num_to_char = load_train_objs(args, device=device)
     train_data = prepare_dataloader(train_ds, args, shuffle=False)
     valid_data = prepare_dataloader(valid_ds, args, shuffle=False)
     trainer = Trainer(

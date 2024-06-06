@@ -3,11 +3,11 @@ gpus : 1
 num_workers : 2
 
 #network params
-model_name: 'resnet18'
+model_name: 'blazenet'
 #video_resize_format: [128,128] #blazenet
-video_resize_format: [224,224] #resnet18
+video_resize_format: [128,128] #[224,224] #resnet18
 
-vocab_size: 39
+vocab_size: 27
 batch: 4
 n_dimention : 500
 
